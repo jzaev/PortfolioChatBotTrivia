@@ -30,8 +30,8 @@ def generate_trivia_button():
     return markup
 
 
-async def fetch_trivia_question():
-    url = f"https://opentdb.com/api.php?amount=1&type=multiple&encode=base64"  # &key={TRIVIA_API_KEY}"
+async def fetch_trivia_question(difficulty: str):
+    url = f"https://opentdb.com/api.php?amount=1&difficulty={difficulty}&type=multiple&encode=base64"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             data = await response.json()
@@ -56,12 +56,12 @@ async def send_response_and_buttons(chat_id, text):
 
 
 async def start_handler(message: types.Message):
-    markup = generate_trivia_button()
-    await message.reply("Welcome to the Trivia Bot! Click the button to get a trivia question.", reply_markup=markup)
+    markup = generate_start_button()
+    await message.reply("Welcome to the Trivia Bot! Click the button to start the test.", reply_markup=markup)
 
 
-async def trivia_handler(message: types.Message):
-    data = await fetch_trivia_question()
+async def trivia_handler(message: types.Message, difficulty: str = "easy"):
+    data = await fetch_trivia_question(difficulty)
     question, options, correct_answer = await format_question(data)
     chat_id = message.chat.id
     correct_answers[chat_id] = correct_answer
@@ -89,14 +89,18 @@ async def end_game_handler(callback_query: types.CallbackQuery):
         percentage = (final_score / total) * 100
     else:
         percentage = 0
-    await bot.send_message(chat_id,
-                           f"Thanks for playing! Your final score is: {final_score}. "
-                           f"Your percentage of correct answers is: {percentage:.1f}%. Click the button to play again.")
-    markup = generate_trivia_button()
-    await bot.send_message(chat_id, "Click the button below to get a new trivia question.", reply_markup=markup)
+    await bot.send_message(
+        chat_id,
+        f"Thanks for playing! Your final score is: {final_score}/{total}. "
+        f"Your percentage of correct answers is: {percentage:.1f}%. Click the button to play again."
+    )
+    markup = generate_start_button()
+    await bot.send_message(chat_id, "Click the button below to start a new test.", reply_markup=markup)
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith("answer_") or c.data in ["get_trivia", "end_game"])
+@dp.callback_query_handler(
+    lambda c: c.data.startswith("answer_") or c.data in ["get_trivia", "end_game"] or c.data.startswith(
+        "difficulty_") or c.data == "start_test")
 async def answer_callback_handler(callback_query: types.CallbackQuery):
     message = callback_query.message
 
@@ -112,11 +116,16 @@ async def answer_callback_handler(callback_query: types.CallbackQuery):
 
         if user_answer.lower() == correct_answer.lower():
             scores[chat_id] += 1
-            await send_response_and_buttons(chat_id, f"Correct! Well done! Your score is: {scores[chat_id]}")
+            await send_response_and_buttons(
+                chat_id,
+                f"🎉 Correct! Well done! Your score is: {scores[chat_id]}/{total_answers[chat_id]}"
+            )
         else:
-            await send_response_and_buttons(chat_id,
-                                            f"Sorry, the correct answer was: {correct_answer}."
-                                            f" Your score is: {scores[chat_id]}")
+            await send_response_and_buttons(
+                chat_id,
+                f"😢 Sorry, the correct answer was: {correct_answer}. "
+                f"Your score is: {scores[chat_id]}/{total_answers[chat_id]}"
+            )
 
         del correct_answers[chat_id]
 
@@ -124,6 +133,33 @@ async def answer_callback_handler(callback_query: types.CallbackQuery):
         await trivia_handler(message)
     elif callback_query.data == "end_game":
         await end_game_handler(callback_query)
+    elif callback_query.data.startswith("difficulty_"):
+        difficulty = callback_query.data.split("_")[1]
+        await trivia_handler(message, difficulty)
+    elif callback_query.data == "start_test":
+        await start_test_handler(callback_query)
+
+
+def generate_start_button():
+    markup = InlineKeyboardMarkup()
+    start_test_button = InlineKeyboardButton("Start Test", callback_data="start_test")
+    markup.add(start_test_button)
+    return markup
+
+
+async def start_test_handler(callback_query: types.CallbackQuery):
+    chat_id = callback_query.from_user.id
+    if chat_id in total_answers:
+        del total_answers[chat_id]
+        del scores[chat_id]
+
+    markup = InlineKeyboardMarkup(row_width=2)
+    easy_button = InlineKeyboardButton("Easy", callback_data="difficulty_easy")
+    medium_button = InlineKeyboardButton("Medium", callback_data="difficulty_medium")
+    hard_button = InlineKeyboardButton("Hard", callback_data="difficulty_hard")
+    markup.add(easy_button, medium_button, hard_button)
+
+    await bot.send_message(chat_id, "Выберите уровень сложности:", reply_markup=markup)
 
 
 dp.register_message_handler(start_handler, commands=["start", "help"])
