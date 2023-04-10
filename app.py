@@ -34,7 +34,6 @@ async def choose_language_handler(message):
     await bot.send_message(chat_id, "Choose the interface language / Выберите язык интерфейса:", reply_markup=markup)
 
 
-
 def generate_trivia_button(language: str):
     markup = InlineKeyboardMarkup()
     trivia_button = InlineKeyboardButton(translations[language]["get_trivia_question"], callback_data="get_trivia")
@@ -69,7 +68,14 @@ async def send_response_and_buttons(chat_id, text, language):
 
 
 async def start_handler(message: types.Message):
-    await ask_language(message)
+    chat_id = message.chat.id
+
+    if chat_id in total_answers:
+        total_answers[chat_id] = 0
+    if chat_id in scores:
+        scores[chat_id] = 0
+
+    await choose_language_handler(message)
 
 
 async def trivia_handler(message: types.Message, difficulty: str = "easy"):
@@ -107,15 +113,17 @@ async def end_game_handler(callback_query: types.CallbackQuery):
     total_answers[chat_id] = 0
     scores[chat_id] = 0
 
+    language = selected_language.get(chat_id, "en")
     await bot.send_message(
         chat_id,
-        f"Thanks for playing! Your final score is: {final_score}/{total}. "
-        f"Your percentage of correct answers is: {percentage:.1f}%. Click the button to play again."
+        translations[language]["thanks_for_playing"].format(score=final_score, total=total, percentage=percentage)
     )
-    language = selected_language.get(callback_query.message.chat.id, "en")
-    markup = generate_start_button()
-    await bot.send_message(chat_id, "Click the button below to start a new test.", reply_markup=markup)
 
+    await bot.send_message(
+        chat_id,
+        translations[language]["click_button_to_start_new_test"],
+        reply_markup=generate_start_button()
+    )
 
 
 @dp.callback_query_handler(
@@ -134,30 +142,40 @@ async def answer_callback_handler(callback_query: types.CallbackQuery):
 
         user_answer = options[user_answer_index - 1]
 
+        language = selected_language.get(chat_id, "en")
+
         if user_answer.lower() == correct_answer.lower():
             scores[chat_id] += 1
-            response_text = f"🎉 Correct! Well done! Your score is: {scores[chat_id]}/{total_answers[chat_id]}"
+            response_text = translations[language]["correct_well_done_score"].format(
+                score=scores[chat_id],
+                total=total_answers[chat_id]
+            )
         else:
-            response_text = f"😢 Sorry, the correct answer was: {correct_answer}." \
-                            f" Your score is: {scores[chat_id]}/{total_answers[chat_id]}"
+            response_text = translations[language]["sorry_correct_answer_was"].format(
+                correct_answer=correct_answer,
+                score=scores[chat_id],
+                total=total_answers[chat_id]
+            )
 
-        language = selected_language.get(chat_id, "en")
         await send_response_and_buttons(chat_id, response_text, language)
 
-    elif callback_query.data == "get_trivia":
+    elif callback_query.data.startswith("get_trivia"):
         await trivia_handler(message)
-    elif callback_query.data == "end_game":
+
+    elif callback_query.data.startswith("end_game"):
         await end_game_handler(callback_query)
-    elif callback_query.data.startswith("difficulty_"):
-        difficulty = callback_query.data.split("_")[1]
-        await trivia_handler(message, difficulty)
-    elif callback_query.data == "start_test":
-        await choose_language_handler(callback_query)
+
     elif callback_query.data.startswith("language_"):
         language = callback_query.data.split("_")[1]
         selected_language[callback_query.message.chat.id] = language
-        await start_test_handler(callback_query, language)
+        await start_test_handler(message)
 
+    elif callback_query.data.startswith("difficulty_"):
+        difficulty = callback_query.data.split("_")[1]
+        await trivia_handler(message, difficulty)
+
+    elif callback_query.data.startswith("start_test"):
+        await start_test_handler(message)
 
 
 def generate_start_button():
@@ -186,13 +204,6 @@ def generate_language_buttons():
     ru_button = InlineKeyboardButton("Русский", callback_data="language_ru")
     markup.add(en_button, ru_button)
     return markup
-
-
-async def ask_language(message: types.Message):
-    markup = generate_language_buttons()
-    await message.reply("Choose the interface language / Выберите язык интерфейса:", reply_markup=markup)
-
-
 
 
 dp.register_message_handler(start_handler, commands=["start", "help"])
