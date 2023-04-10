@@ -15,7 +15,9 @@ dp.middleware.setup(LoggingMiddleware())
 
 trivia_instance = Trivia(bot=bot)  # Создайте экземпляр Trivia
 
-dp.register_message_handler(lambda message: start_handler(message, trivia=trivia_instance), commands=["start"])
+dp.register_message_handler(lambda message: trivia_instance.start_handler(message), commands=["start"])
+
+# dp.register_message_handler(lambda message: start_handler(message, trivia=trivia_instance), commands=["start"])
 dp.register_callback_query_handler(lambda query: answer_callback_handler(query, trivia=trivia_instance))
 
 if __name__ == '__main__':

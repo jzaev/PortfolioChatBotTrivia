@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 import base64
 from config import MY_TOKEN
-from dict import translations
+from translations_dict import translations
 
 logging.basicConfig(level=logging.INFO)
 

@@ -1,6 +1,6 @@
 import aiohttp
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ParseMode, Message, CallbackQuery
-from dict import translations
+from translations_dict import translations
 import base64
 
 
@@ -12,6 +12,12 @@ class Trivia:
         self.total_answers = {}
         self.options_per_chat = {}
         self.selected_language = {}
+
+    def generate_start_game_button(self, language: str):
+        markup = InlineKeyboardMarkup()
+        start_game_button = InlineKeyboardButton(translations[language]["start_game"], callback_data="start_game")
+        markup.add(start_game_button)
+        return markup
 
     async def choose_language_handler(self, message):
         chat_id = message.chat.id if isinstance(message, Message) else message.from_user.id
@@ -60,7 +66,13 @@ class Trivia:
         if chat_id in self.scores:
             self.scores[chat_id] = 0
 
-        await self.choose_language_handler(message)
+        # Создание кнопки "Start Game"
+        markup = InlineKeyboardMarkup()
+        start_game_button = InlineKeyboardButton("Start Game", callback_data="start_game")
+        markup.add(start_game_button)
+
+        # Отправка сообщения с кнопкой "Start Game"
+        await self.bot.send_message(chat_id, "Press the button below to start the game:", reply_markup=markup)
 
     async def trivia_handler(self, message: Message, difficulty: str = "easy"):
         data = await self.fetch_trivia_question(difficulty)
@@ -110,7 +122,10 @@ class Trivia:
     async def answer_callback_handler(self, callback_query: CallbackQuery):
         message = callback_query.message
 
-        if callback_query.data.startswith("answer_"):
+        if callback_query.data.startswith("start_game"):
+            await self.choose_language_handler(message)
+
+        elif callback_query.data.startswith("answer_"):
             chat_id = message.chat.id
 
             # Check if chat_id is in correct_answers dictionary
