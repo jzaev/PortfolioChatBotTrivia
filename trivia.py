@@ -17,6 +17,7 @@ class Trivia:
         self.options_per_chat = {}
         self.selected_language = {}
         self.translated_options_per_chat = {}
+        self.original_options_per_chat = {}
 
     def generate_start_game_button(self, language: str):
         markup = InlineKeyboardMarkup()
@@ -72,13 +73,18 @@ class Trivia:
         data = await self.fetch_trivia_question(difficulty)
         question, options, correct_answer = await self.format_question(data, message)
         chat_id = message.chat.id
+
+        # Сохраните оригинальные английские варианты ответов
+        original_options = options.copy()
+
         if self.selected_language.get(chat_id) == "ru":
             correct_answer = await self.translate_text_with_chatgpt(correct_answer, "English", "Russian")
             self.correct_answers[chat_id] = correct_answer
         else:
             self.correct_answers[chat_id] = correct_answer
 
-        self.options_per_chat[chat_id] = options  # Save options for this chat
+        self.original_options_per_chat[chat_id] = original_options  # Save original options for this chat
+        self.options_per_chat[chat_id] = options  # Save translated options for this chat
         if chat_id not in self.total_answers:
             self.total_answers[chat_id] = 0
             self.scores[chat_id] = 0  # Initialize scores for the chat
@@ -118,7 +124,7 @@ class Trivia:
         await self.bot.send_message(
             chat_id,
             translations[language]["click_button_to_start_new_test"],
-            reply_markup=self.generate_start_button()
+            reply_markup=self.generate_start_game_button(language)  # Изменение здесь
         )
 
     async def answer_callback_handler(self, callback_query: CallbackQuery):
@@ -135,16 +141,16 @@ class Trivia:
                 await self.trivia_handler(message)
                 return
 
-            user_answer_index = int(callback_query.data.split("_")[1])
+            user_answer_index = int(callback_query.data.split("_")[1]) - 1
             correct_answer = self.correct_answers[chat_id]
 
             # Choose the appropriate options list based on the selected language
             if self.selected_language.get(chat_id) == "ru":
-                options = self.translated_options_per_chat.get(chat_id, [])
+                options = self.original_options_per_chat.get(chat_id, [])
             else:
                 options = self.options_per_chat.get(chat_id, [])
 
-            user_answer = options[user_answer_index - 1]
+            user_answer = options[user_answer_index]
 
             # Answer the callback query
             await self.bot.answer_callback_query(callback_query.id)
@@ -176,6 +182,11 @@ class Trivia:
         elif callback_query.data.startswith("language_"):
             language = callback_query.data.split("_")[1]
             self.selected_language[message.chat.id] = language
+            if language == "ru":
+                await self.bot.send_message(message.chat.id,
+                                            "Перевод вопросов и ответов выполняется с использованием OpenAI GPT-4."
+                                            " Пожалуйста, обратите внимание, что перевод может быть неточным. "
+                                            "Перевод выполняется онлайн поэтому реакция бота может быть замедленной.")
             await self.start_test_handler(message)
 
         elif callback_query.data.startswith("difficulty_"):

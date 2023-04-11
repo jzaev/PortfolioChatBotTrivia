@@ -13,7 +13,7 @@ translations = {
         "click_button_to_start_new_test": "Click the button below to start a new test",
         "sorry_correct_answer_was": "😢 Sorry, the correct answer was: {correct_answer}. Your score is: {score}/{total}",
         "correct_well_done_score": "🎉 Correct! Well done! Your score is: {score}/{total}",
-
+        "start_game": "Start Game",
     },
     "ru": {
         "get_trivia_question": "Задать вопрос",
@@ -28,5 +28,6 @@ translations = {
         "click_button_to_start_new_test": "Нажмите кнопку ниже, чтобы начать новый тест",
         "sorry_correct_answer_was": "😢 К сожалению, правильный ответ был: {correct_answer}. Ваш счет: {score}/{total}",
         "correct_well_done_score": "🎉 Верно! Молодец! Ваш счет: {score}/{total}",
+        "start_game": "Начать игру",
     },
 }
