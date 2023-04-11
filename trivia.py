@@ -2,6 +2,10 @@ import aiohttp
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ParseMode, Message, CallbackQuery
 from translations_dict import translations
 import base64
+import openai
+from config import MY_OPEN_AI_KEY
+
+openai.api_key = MY_OPEN_AI_KEY
 
 
 class Trivia:
@@ -12,6 +16,7 @@ class Trivia:
         self.total_answers = {}
         self.options_per_chat = {}
         self.selected_language = {}
+        self.translated_options_per_chat = {}
 
     def generate_start_game_button(self, language: str):
         markup = InlineKeyboardMarkup()
@@ -43,17 +48,6 @@ class Trivia:
                 data = await response.json()
         return data
 
-    async def format_question(self, data):
-        question = base64.b64decode(data["results"][0]["question"]).decode('utf-8')
-        correct_answer = base64.b64decode(data["results"][0]["correct_answer"]).decode('utf-8')
-        incorrect_answers = [base64.b64decode(ans).decode('utf-8') for ans in data["results"][0]["incorrect_answers"]]
-
-        formatted_question = f"<b>{question}</b>\n\n"
-        options = [correct_answer] + incorrect_answers
-        options.sort()
-
-        return formatted_question, options, correct_answer
-
     async def send_response_and_buttons(self, chat_id, text, language):
         markup = self.generate_trivia_button(language)
         await self.bot.send_message(chat_id, text, reply_markup=markup)
@@ -66,23 +60,31 @@ class Trivia:
         if chat_id in self.scores:
             self.scores[chat_id] = 0
 
-        # Создание кнопки "Start Game"
+        # Creating button "Start Game"
         markup = InlineKeyboardMarkup()
         start_game_button = InlineKeyboardButton("Start Game", callback_data="start_game")
         markup.add(start_game_button)
 
-        # Отправка сообщения с кнопкой "Start Game"
+        # Sending message with "Start Game"
         await self.bot.send_message(chat_id, "Press the button below to start the game:", reply_markup=markup)
 
     async def trivia_handler(self, message: Message, difficulty: str = "easy"):
         data = await self.fetch_trivia_question(difficulty)
-        question, options, correct_answer = await self.format_question(data)
+        question, options, correct_answer = await self.format_question(data, message)
         chat_id = message.chat.id
-        self.correct_answers[chat_id] = correct_answer
+        if self.selected_language.get(chat_id) == "ru":
+            correct_answer = await self.translate_text_with_chatgpt(correct_answer, "English", "Russian")
+            self.correct_answers[chat_id] = correct_answer
+        else:
+            self.correct_answers[chat_id] = correct_answer
+
         self.options_per_chat[chat_id] = options  # Save options for this chat
         if chat_id not in self.total_answers:
             self.total_answers[chat_id] = 0
             self.scores[chat_id] = 0  # Initialize scores for the chat
+
+        # Increment the total number of questions
+        self.total_answers[chat_id] += 1
 
         inline_keyboard = InlineKeyboardMarkup()
         for index, option in enumerate(options, start=1):
@@ -135,9 +137,12 @@ class Trivia:
 
             user_answer_index = int(callback_query.data.split("_")[1])
             correct_answer = self.correct_answers[chat_id]
-            self.total_answers[chat_id] += 1
 
-            options = self.options_per_chat.get(chat_id, [])
+            # Choose the appropriate options list based on the selected language
+            if self.selected_language.get(chat_id) == "ru":
+                options = self.translated_options_per_chat.get(chat_id, [])
+            else:
+                options = self.options_per_chat.get(chat_id, [])
 
             user_answer = options[user_answer_index - 1]
 
@@ -161,7 +166,6 @@ class Trivia:
 
             await self.send_response_and_buttons(chat_id, response_text, language)
             await self.send_response_and_buttons(chat_id, translations[language]["continue_or_end"], language)
-
 
         elif callback_query.data.startswith("get_trivia"):
             await self.trivia_handler(message)
@@ -205,3 +209,37 @@ class Trivia:
         ru_button = InlineKeyboardButton("Русский", callback_data="language_ru")
         markup.add(en_button, ru_button)
         return markup
+
+    @staticmethod
+    async def translate_text_with_chatgpt(text: str, source_language: str, target_language: str):
+        prompt = f"Translate the following text from {source_language} to {target_language}: '{text}'"
+        response = openai.Completion.create(engine="text-davinci-002", prompt=prompt, max_tokens=100, n=1,
+                                            stop=None,
+                                            temperature=0.5)
+
+        translated_text = response.choices[0].text.strip()
+        return translated_text
+
+    async def format_question(self, data, message):
+        chat_id = message.chat.id  # Move this line to the beginning of the method
+
+        question = base64.b64decode(data["results"][0]["question"]).decode('utf-8')
+        correct_answer = base64.b64decode(data["results"][0]["correct_answer"]).decode('utf-8')
+        incorrect_answers = [base64.b64decode(ans).decode('utf-8') for ans in
+                             data["results"][0]["incorrect_answers"]]
+
+        formatted_question = f"<b>{question}</b>\n\n"
+        options = [correct_answer] + incorrect_answers
+        options.sort()
+        self.translated_options_per_chat[chat_id] = options
+
+        # Перевод вопроса и ответов на русский язык
+        if self.selected_language.get(chat_id) == "ru":
+            translated_question = await self.translate_text_with_chatgpt(question, "English", "Russian")
+            formatted_question = f"<b>{translated_question}</b>\n\n"
+
+            for index, option in enumerate(options):
+                translated_option = await self.translate_text_with_chatgpt(option, "English", "Russian")
+                options[index] = translated_option
+
+        return formatted_question, options, correct_answer
