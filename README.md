@@ -1,7 +1,7 @@
 # Trivia Chatbot
 ## This task can be considered as a portfolio work.
 
-This version is created for practicing programming in Python and building a professional portfolio by <a href="https://github.com/jzaev" target="_blank">Yury Zaev</a>. It does not represent any commercial interest and is not a complete solution.
+This version is created for practicing programming in Python and building a professional portfolio by <a href="https://github.com/jzaev" target="_blank">Yury Zaev</a>. It does not represent any commercial interest.
 
 ## Features
 This is a Telegram chatbot designed to entertain and engage users with trivia questions. It uses OpenAI GPT-4 to translate questions and answer options between English and Russian languages. The main features of this trivia chatbot include:
